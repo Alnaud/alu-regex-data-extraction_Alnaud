@@ -18,8 +18,7 @@ script tags, javascript: links, or SQL injection style text. If a piece of
 text overlaps with one of those flagged areas, I don't extract it as normal
 data - I just count it as a security flag instead.
 
-A few notes on why I did things a certain way (mostly because my professor
-would probably ask, lol):
+A few notes on why I did things a certain way:
     - I never use eval() or exec() on anything from the input text. That
       would be a huge security risk.
     - Credit card numbers get masked (**** **** **** 1234) before they are
@@ -40,21 +39,15 @@ import os
 import re
 from datetime import datetime, timezone
 
-# ---------------------------------------------------------------------------
 # Just a heads up: doing PERFECT email/phone/URL validation is really hard
 # and usually needs a dedicated library (there are whole libraries just for
 # validating phone numbers per country). Since this assignment is about
 # practicing regex, my patterns below are "good enough" for the test data,
-# not 100% bulletproof. I mention the limitations again in the README.
-# ---------------------------------------------------------------------------
-
-
-# ============================================================================
 # SECURITY CHECK STEP
 # Before I trust the text enough to pull "real" data out of it, I scan the
 # WHOLE thing for patterns that look malicious (script injection, the
 # javascript: pseudo protocol, and SQL-injection-looking strings).
-# ============================================================================
+
 SECURITY_PATTERNS = [
     ("script_tag", re.compile(r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL)),
     ("event_handler_attr", re.compile(r'\bon\w+\s*=\s*["\'][^"\']*["\']', re.IGNORECASE)),
@@ -122,9 +115,7 @@ def sanitize_for_output(value, max_len=200):
     return cleaned
 
 
-# ============================================================================
 # 1. EMAIL ADDRESSES  (general emails + ALU-specific categories)
-# ============================================================================
 # The local part (before the @) has to start with a letter/number, then can
 # have the usual email-safe characters. The domain part is normal
 # dot-separated labels, ending in a TLD of 2+ letters. The lookaround stuff
@@ -171,9 +162,7 @@ def extract_emails(text, flags):
     return results
 
 
-# ============================================================================
-# 2. CREDIT CARD NUMBERS (check format + run Luhn's algorithm + mask it)
-# ============================================================================
+# CREDIT CARD NUMBERS (check format + run Luhn's algorithm + mask it)
 # I'm looking for 16 digits grouped in 4s (4-4-4-4), separated by spaces,
 # dashes, or nothing at all. On purpose, this will NOT match weird stuff
 # like "1234-56-78" since that's not grouped correctly and doesn't have
@@ -217,12 +206,8 @@ def extract_credit_cards(text, flags):
             }
         )
     return results, card_spans
-
-
-# ============================================================================
-# 3. PHONE NUMBERS (messy, mixed international + local formats)
-# ============================================================================
-# Instead of trying to write a separate regex for every single country's
+# PHONE NUMBERS (messy, mixed international + local formats)
+#  Instead of trying to write a separate regex for every single country's
 # phone number format (which honestly sounds miserable), I just grab
 # anything that LOOKS like a phone number (digits, spaces, dots, dashes,
 # parentheses, maybe a leading +) and then decide if it's "plausible" based
@@ -259,11 +244,7 @@ def extract_phones(text, flags, card_spans=()):
             }
         )
     return results
-
-
-# ============================================================================
-# 4. URLS (only http/https, nothing else counts)
-# ============================================================================
+# URLS (only http/https, nothing else counts)
 # By only matching things that literally start with http:// or https://, I
 # automatically ignore dangerous stuff like "javascript:alert(...)" without
 # having to write any extra logic for it.
@@ -286,9 +267,8 @@ def extract_urls(text, flags):
     return results
 
 
-# ============================================================================
-# PUTTING IT ALL TOGETHER
-# ============================================================================
+# Putted it all together
+
 def analyze(text):
     security_flags = find_security_flags(text)
     credit_cards, card_spans = extract_credit_cards(text, security_flags)
