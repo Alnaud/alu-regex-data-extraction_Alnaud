@@ -1,37 +1,38 @@
 """
-ALU Regex Data Extraction & Secure Validation
-=============================================
+ALU Regex Data Extraction & Validation Project
+================================================
 
-Reads raw, messy text (simulating an external API dump), extracts four
-structured data types with regex, validates them, and writes a safe,
-structured JSON report.
+This script reads a messy block of text (kind of like a fake dump of data
+we'd get from an API or a scraped webpage) and pulls out 4 kinds of info
+using regex:
+    1. Emails (and I also sort ALU emails into categories)
+    2. Credit card numbers (I check the format, run Luhn's algorithm on
+       them, and then mask them so the real number is never shown)
+    3. Phone numbers (lots of different formats, so this is not perfect)
+    4. URLs (only http/https, nothing else)
 
-Data types extracted:
-    1. Email addresses (including ALU-specific sub-classifications)
-    2. Credit card numbers (format-checked + Luhn-validated + masked)
-    3. Phone numbers (multiple international/local formats)
-    4. URLs (http/https only)
+I also added a very basic "security check" step before doing any of the
+real extraction. The idea is: don't trust the input text. So before I even
+look for emails/cards/etc, I scan the whole text for things that look like
+script tags, javascript: links, or SQL injection style text. If a piece of
+text overlaps with one of those flagged areas, I don't extract it as normal
+data - I just count it as a security flag instead.
 
-Security posture:
-    - Input is treated as UNTRUSTED. Before any extraction happens, the raw
-      text is scanned for known attack patterns (script injection,
-      javascript: pseudo-protocol, SQL-injection style strings).
-    - Anything that overlaps a flagged malicious region is NOT extracted as
-      "safe" data (e.g. a URL sitting inside a <script> tag is reported as
-      a security flag, not as a normal URL).
-    - We never eval(), exec(), or otherwise execute anything found in the
-      input.
-    - Credit card numbers are masked before they ever reach the JSON output
-      or the console. Full numbers are held only in memory, briefly, for
-      the Luhn check.
-    - Anything we print or write to file is first passed through
-      sanitize_for_output(), which strips control characters and truncates
-      length, so hostile text can't corrupt logs or downstream JSON
-      consumers.
+A few notes on why I did things a certain way (mostly because my professor
+would probably ask, lol):
+    - I never use eval() or exec() on anything from the input text. That
+      would be a huge security risk.
+    - Credit card numbers get masked (**** **** **** 1234) before they are
+      ever printed or saved to the JSON file. The full number only exists
+      in memory for a split second while I check Luhn's algorithm.
+    - Anything that gets printed/saved goes through a small "cleanup"
+      function first (sanitize_for_output) that removes weird control
+      characters and cuts off text that's too long. This is just to stop
+      someone from injecting weird escape codes into my logs or JSON.
 
-Run:
+How to run it:
     python src/main.py
-(See README.md for details.)
+(more info is in the README.md)
 """
 
 import json
@@ -40,19 +41,19 @@ import re
 from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
-# NOTE ON REALISM: a fully correct implementation of email/phone/URL
-# validation would need dedicated libraries (e.g. a phone-number library
-# that knows every country's numbering plan). This assignment is scoped to
-# regex-based extraction, so the patterns below are deliberately practical
-# rather than exhaustive -- limitations are called out in comments and in
-# the README.
+# Just a heads up: doing PERFECT email/phone/URL validation is really hard
+# and usually needs a dedicated library (there are whole libraries just for
+# validating phone numbers per country). Since this assignment is about
+# practicing regex, my patterns below are "good enough" for the test data,
+# not 100% bulletproof. I mention the limitations again in the README.
 # ---------------------------------------------------------------------------
 
 
 # ============================================================================
-# SECURITY: patterns that indicate the input is trying to do something other
-# than just "be data" (script injection, protocol smuggling, SQL injection).
-# These are checked FIRST, before any "normal" extraction happens.
+# SECURITY CHECK STEP
+# Before I trust the text enough to pull "real" data out of it, I scan the
+# WHOLE thing for patterns that look malicious (script injection, the
+# javascript: pseudo protocol, and SQL-injection-looking strings).
 # ============================================================================
 SECURITY_PATTERNS = [
     ("script_tag", re.compile(r"<script\b[^>]*>.*?</script\s*>", re.IGNORECASE | re.DOTALL)),
@@ -67,17 +68,19 @@ SECURITY_PATTERNS = [
     ),
 ]
 
-# Generic HTML tag detector, used only to strip/neutralize tags that show up
-# inside otherwise-legitimate text (not itself a "data type" we extract).
+# Not really one of the "4 data types" we need to extract, just a helper
+# regex in case I need to strip stray HTML tags out of otherwise normal text.
 HTML_TAG_REGEX = re.compile(r"</?[a-zA-Z][^<>]*>")
 
 
 def find_security_flags(text):
     """
-    Scan the ENTIRE raw text for known attack patterns before we trust any
-    of it. Returns a list of flags, each with the character span so later
-    extraction steps can avoid pulling "clean-looking" data out of a
-    malicious region (e.g. a URL that only exists inside a <script> tag).
+    Goes through the whole raw text and looks for the "attack-looking"
+    patterns defined above. Returns a list of flags with the start/end
+    position of each match, so that later, when I'm extracting emails/URLs/
+    etc, I can skip anything that overlaps with one of these flagged spots.
+    (For example, if there's a URL hiding inside a <script> tag, I don't
+    want to report that as a normal, safe URL.)
     """
     flags = []
     for label, pattern in SECURITY_PATTERNS:
@@ -86,7 +89,7 @@ def find_security_flags(text):
                 {
                     "type": label,
                     "span": (m.start(), m.end()),
-                    # Truncate + sanitize before we ever store/print it.
+                    # clean it up before saving/printing, just in case
                     "snippet": sanitize_for_output(m.group(0), max_len=80),
                 }
             )
@@ -94,7 +97,7 @@ def find_security_flags(text):
 
 
 def overlaps_flagged_region(start, end, flags):
-    """True if [start, end) overlaps any security-flagged span."""
+    """Quick helper: does [start, end) overlap with any flagged span?"""
     for f in flags:
         f_start, f_end = f["span"]
         if start < f_end and end > f_start:
@@ -104,14 +107,14 @@ def overlaps_flagged_region(start, end, flags):
 
 def sanitize_for_output(value, max_len=200):
     """
-    Defensive helper used on anything derived from untrusted input before it
-    is printed to the console or written to JSON. Strips control/ non
-    printable characters (which could otherwise be used for log injection /
-    terminal escape tricks) and truncates overly long values.
+    Small helper I use anywhere I'm about to print or save something that
+    came from the untrusted input text. It strips out control characters
+    (which could otherwise mess with the terminal or be used for some kind
+    of log injection trick) and cuts the string short if it's too long.
     """
     if value is None:
         return value
-    # Remove ASCII control characters (0x00-0x1F, 0x7F) except plain spaces.
+    # get rid of ASCII control characters (0x00-0x1F and 0x7F)
     cleaned = re.sub(r"[\x00-\x1f\x7f]", "", value)
     cleaned = cleaned.strip()
     if len(cleaned) > max_len:
@@ -120,33 +123,34 @@ def sanitize_for_output(value, max_len=200):
 
 
 # ============================================================================
-# 1. EMAIL ADDRESSES  (general + ALU-specific classification)
+# 1. EMAIL ADDRESSES  (general emails + ALU-specific categories)
 # ============================================================================
-# Local part: must start with an alphanumeric char, then allow the usual
-# RFC-5322-ish "safe" characters. Domain: standard dot-separated labels plus
-# a final TLD of 2+ letters. Lookaround guards stop us from matching only
-# *part* of a longer, malformed run of characters (e.g. "broken@@email.com").
+# The local part (before the @) has to start with a letter/number, then can
+# have the usual email-safe characters. The domain part is normal
+# dot-separated labels, ending in a TLD of 2+ letters. The lookaround stuff
+# at the start/end is just there so I don't accidentally match half of a
+# broken email like "broken@@email.com".
 EMAIL_REGEX = re.compile(
-    r"(?<![\w.+-])"                                   # not preceded by an email-ish char
-    r"[A-Za-z0-9][A-Za-z0-9._%+-]*"                   # local part
+    r"(?<![\w.+-])"                                   # don't start matching in the middle of an email
+    r"[A-Za-z0-9][A-Za-z0-9._%+-]*"                   # local part (before the @)
     r"@"
     r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"       # first domain label
-    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*"  # additional domain labels
-    r"\.[A-Za-z]{2,}"                                 # TLD
-    r"(?![\w.+-])"                                    # not followed by an email-ish char
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*"  # any more domain labels
+    r"\.[A-Za-z]{2,}"                                 # the TLD (.com, .edu, etc)
+    r"(?![\w.+-])"                                    # don't stop matching in the middle either
 )
 
-# ALU-specific domains. Checked with $ anchors against the *domain only*,
-# case-insensitive (so "aluEducation.com" still validates), and checked
-# from most-specific to least-specific so "alumni.alueducation.com" is never
-# mis-classified as a generic "@alueducation.com" official address.
+# These are the ALU-specific domains I need to recognize. I check them from
+# most specific to least specific (alumni/si before the general official
+# domain) so something like "alumni.alueducation.com" doesn't accidentally
+# get labeled as just a plain "@alueducation.com" address.
 ALU_ALUMNI_DOMAIN = re.compile(r"^alumni\.alueducation\.com$", re.IGNORECASE)
 ALU_SI_DOMAIN = re.compile(r"^si\.alueducation\.com$", re.IGNORECASE)
 ALU_OFFICIAL_DOMAIN = re.compile(r"^alueducation\.com$", re.IGNORECASE)
 
 
 def classify_email(email):
-    """Return an ALU category, or 'general' for any other well-formed email."""
+    """Figures out which ALU category an email belongs to (or 'general')."""
     domain = email.split("@", 1)[1]
     if ALU_ALUMNI_DOMAIN.match(domain):
         return "alu_alumni"
@@ -161,24 +165,24 @@ def extract_emails(text, flags):
     results = []
     for m in EMAIL_REGEX.finditer(text):
         if overlaps_flagged_region(m.start(), m.end(), flags):
-            continue  # don't trust "emails" sitting inside a flagged payload
+            continue  # this "email" is inside a flagged/malicious chunk, skip it
         email = m.group(0)
         results.append({"value": email, "category": classify_email(email)})
     return results
 
 
 # ============================================================================
-# 2. CREDIT CARD NUMBERS (format check + Luhn validation + masking)
+# 2. CREDIT CARD NUMBERS (check format + run Luhn's algorithm + mask it)
 # ============================================================================
-# Matches 16 digits grouped as 4-4-4-4, separated consistently by spaces,
-# dashes, or nothing. This intentionally will NOT match something like
-# "1234-56-78" (wrong grouping / too few digits), which the assignment asks
-# us to reject.
+# I'm looking for 16 digits grouped in 4s (4-4-4-4), separated by spaces,
+# dashes, or nothing at all. On purpose, this will NOT match weird stuff
+# like "1234-56-78" since that's not grouped correctly and doesn't have
+# enough digits anyway.
 CREDIT_CARD_REGEX = re.compile(r"\b\d{4}[ -]?\d{4}[ -]?\d{4}[ -]?\d{4}\b")
 
 
 def luhn_is_valid(digits):
-    """Standard Luhn checksum used by all major card networks."""
+    """This is just the standard Luhn checksum that credit card companies use."""
     total = 0
     reverse_digits = digits[::-1]
     for i, ch in enumerate(reverse_digits):
@@ -192,7 +196,7 @@ def luhn_is_valid(digits):
 
 
 def mask_card(digits):
-    """Never expose the full number: keep only the last 4 digits."""
+    """We should never show the full card number, so just keep the last 4."""
     return "**** **** **** " + digits[-4:]
 
 
@@ -207,7 +211,7 @@ def extract_credit_cards(text, flags):
         digits = re.sub(r"[ -]", "", raw)
         results.append(
             {
-                # SECURITY: only the masked form ever leaves this function.
+                # only the masked version ever leaves this function, on purpose
                 "masked": mask_card(digits),
                 "luhn_valid": luhn_is_valid(digits),
             }
@@ -216,17 +220,18 @@ def extract_credit_cards(text, flags):
 
 
 # ============================================================================
-# 3. PHONE NUMBERS (realistic, messy, international + local formats)
+# 3. PHONE NUMBERS (messy, mixed international + local formats)
 # ============================================================================
-# We deliberately extract broadly (digits, spaces, dots, dashes, parens,
-# leading +) and then validate by counting digits, rather than trying to
-# write one regex per country's numbering plan (that's a job for a proper
-# phone-number library, not raw regex). An optional "ext./x <digits>"
-# suffix is captured separately.
+# Instead of trying to write a separate regex for every single country's
+# phone number format (which honestly sounds miserable), I just grab
+# anything that LOOKS like a phone number (digits, spaces, dots, dashes,
+# parentheses, maybe a leading +) and then decide if it's "plausible" based
+# on how many digits it has. I also grab an optional extension like "ext. 123"
+# or "x123" if there is one.
 PHONE_REGEX = re.compile(
     r"(?<!\w)"
-    r"(\+?\(?\d[\d\s().-]{6,17}\d)"          # main number candidate
-    r"(?:\s*(?:ext\.?|x)\s*(\d{1,5}))?"      # optional extension
+    r"(\+?\(?\d[\d\s().-]{6,17}\d)"          # the main phone number part
+    r"(?:\s*(?:ext\.?|x)\s*(\d{1,5}))?"      # optional extension, e.g. ext. 123
     r"(?!\w)",
     re.IGNORECASE,
 )
@@ -238,11 +243,12 @@ def extract_phones(text, flags, card_spans=()):
         if overlaps_flagged_region(m.start(), m.end(), flags):
             continue
         if overlaps_flagged_region(m.start(), m.end(), [{"span": s} for s in card_spans]):
-            continue  # already classified as a credit card number, don't double-count
+            continue  # this was already grabbed as a credit card, don't count it twice
         raw_number, ext = m.group(1), m.group(2)
         digit_count = len(re.sub(r"\D", "", raw_number))
-        # E.164 allows a max of 15 digits; we require at least 7 so we don't
-        # pick up short unrelated numbers (ticket numbers, years, etc.).
+        # real phone numbers max out at 15 digits (E.164 standard), and I
+        # want at least 7 so I don't accidentally grab random short numbers
+        # like a ticket number or a year
         is_valid_length = 7 <= digit_count <= 15
         results.append(
             {
@@ -256,11 +262,11 @@ def extract_phones(text, flags, card_spans=()):
 
 
 # ============================================================================
-# 4. URLS (http/https only -- explicitly excludes javascript: etc.)
+# 4. URLS (only http/https, nothing else counts)
 # ============================================================================
-# Requiring the literal http:// or https:// scheme automatically excludes
-# dangerous pseudo-protocols like "javascript:alert(...)" from ever being
-# treated as a URL, without needing extra logic here.
+# By only matching things that literally start with http:// or https://, I
+# automatically ignore dangerous stuff like "javascript:alert(...)" without
+# having to write any extra logic for it.
 URL_REGEX = re.compile(r"\bhttps?://[^\s<>\"')]+", re.IGNORECASE)
 
 
@@ -268,19 +274,20 @@ def extract_urls(text, flags):
     results = []
     for m in URL_REGEX.finditer(text):
         url = m.group(0)
-        # Trim common trailing punctuation that regex greediness can pick up
-        # (e.g. a URL immediately followed by a period or closing bracket).
+        # regex tends to be a little too greedy, so I trim off trailing
+        # punctuation that's probably not actually part of the URL
+        # (like a period right after a link at the end of a sentence)
         trimmed = re.sub(r"[.,;:)\]]+$", "", url)
         end = m.start() + len(trimmed)
         if overlaps_flagged_region(m.start(), end, flags):
-            # e.g. a URL that only appears inside a <script> tag payload.
+            # e.g. this URL only shows up because it's inside a <script> tag
             continue
         results.append({"value": trimmed})
     return results
 
 
 # ============================================================================
-# ORCHESTRATION
+# PUTTING IT ALL TOGETHER
 # ============================================================================
 def analyze(text):
     security_flags = find_security_flags(text)
@@ -298,10 +305,9 @@ def analyze(text):
 
 def print_console_summary(report):
     """
-    Console output intentionally shows COUNTS and MASKED values only.
-    Full email addresses are shown (they're the extracted product this
-    program is meant to verify) but credit cards stay masked everywhere,
-    and no raw flagged/malicious text is ever printed in full.
+    Prints a quick summary to the console. I show full emails since that's
+    the whole point of this program, but credit cards always stay masked,
+    and I never print the full text of anything flagged as malicious.
     """
     print("=" * 60)
     print("ALU Regex Data Extraction - Summary")
@@ -334,6 +340,7 @@ def print_console_summary(report):
 
 
 def main():
+    # figuring out where the input/output files live relative to this script
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     input_path = os.path.join(base_dir, "input", "raw-text.txt")
     output_path = os.path.join(base_dir, "output", "sample-output.json")
