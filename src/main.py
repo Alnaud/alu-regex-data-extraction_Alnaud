@@ -1,15 +1,14 @@
 """
 ALU Regex Data Extraction & Validation Project
-================================================
 
 This script reads a messy block of text (kind of like a fake dump of data
 we'd get from an API or a scraped webpage) and pulls out 4 kinds of info
 using regex:
-    1. Emails (and I also sort ALU emails into categories)
-    2. Credit card numbers (I check the format, run Luhn's algorithm on
+1. Emails (and I also sort ALU emails into categories)
+ 2. Credit card numbers (I check the format, run Luhn's algorithm on
        them, and then mask them so the real number is never shown)
-    3. Phone numbers (lots of different formats, so this is not perfect)
-    4. URLs (only http/https, nothing else)
+3. Phone numbers (lots of different formats, so this is not perfect)
+4. URLs (only http/https, nothing else)
 
 I also added a very basic "security check" step before doing any of the
 real extraction. The idea is: don't trust the input text. So before I even
@@ -19,12 +18,12 @@ text overlaps with one of those flagged areas, I don't extract it as normal
 data - I just count it as a security flag instead.
 
 A few notes on why I did things a certain way:
-    - I never use eval() or exec() on anything from the input text. That
+ - I never use eval() or exec() on anything from the input text. That
       would be a huge security risk.
-    - Credit card numbers get masked (**** **** **** 1234) before they are
+ - Credit card numbers get masked (**** **** **** 1234) before they are
       ever printed or saved to the JSON file. The full number only exists
       in memory for a split second while I check Luhn's algorithm.
-    - Anything that gets printed/saved goes through a small "cleanup"
+ - Anything that gets printed/saved goes through a small "cleanup"
       function first (sanitize_for_output) that removes weird control
       characters and cuts off text that's too long. This is just to stop
       someone from injecting weird escape codes into my logs or JSON.
